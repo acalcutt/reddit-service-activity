@@ -97,6 +97,26 @@ jobs:
           print('py_compile OK')
           PY
 
+      - name: Ensure thrift compiler
+        run: |
+          if ! command -v thrift >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y thrift-compiler
+          fi
+
+      - name: Generate thrift Python stubs
+        run: |
+          # Generate Python thrift bindings into reddit_service_activity/activity_thrift
+          thrift --gen py reddit_service_activity/activity.thrift
+          rm -rf reddit_service_activity/activity_thrift || true
+          mkdir -p reddit_service_activity/activity_thrift
+          mv gen-py/* reddit_service_activity/activity_thrift/ || true
+          # Ensure package init
+          if [ ! -f reddit_service_activity/activity_thrift/__init__.py ]; then
+            touch reddit_service_activity/activity_thrift/__init__.py
+          fi
+          rm -rf gen-py || true
+
       - name: Install package and test deps
         working-directory: .
         run: |
