@@ -1,4 +1,4 @@
-name: CI — reddit-service-activity
+name: CI - reddit-service-activity
 
 on:
   push: {}
