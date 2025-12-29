@@ -258,6 +258,8 @@ else:
             if not all(_ID_RE.match(context_id) for context_id in context_ids):
                 if ActivityService is not None and getattr(ActivityService, "InvalidContextIDException", None) is not None:
                     raise ActivityService.InvalidContextIDException
+                if 'local_activity_client' in globals() and getattr(local_activity_client, 'InvalidContextIDException', None):
+                    raise local_activity_client.InvalidContextIDException
                 raise ValueError("invalid context id")
 
             # best-effort: try to fetch cache values, otherwise return zeros

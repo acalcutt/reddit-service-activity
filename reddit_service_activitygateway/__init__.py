@@ -192,6 +192,26 @@ class ActivityContextFactory:
         # Instantiate a fresh client per-request to match ThriftContextFactory
         return self.client_cls()
 
+    # Provide a small delegation surface so if a framework integration
+    # mistakenly registers the factory itself as `request.activity`, the
+    # object still behaves like a client. Each delegated call will
+    # instantiate a fresh client and forward the call.
+    def record_activity(self, *args, **kwargs):
+        return self.client_cls().record_activity(*args, **kwargs)
+
+    def is_healthy(self, *args, **kwargs):
+        try:
+            return self.client_cls().is_healthy(*args, **kwargs)
+        except Exception:
+            return False
+
+    def __getattr__(self, name):
+        # Lazy-forward other attributes/methods to a fresh client.
+        def _forward(*args, **kwargs):
+            return getattr(self.client_cls(), name)(*args, **kwargs)
+
+        return _forward
+
 
 class ActivityGateway(object):
     def is_healthy(self, request):
