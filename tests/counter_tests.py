@@ -3,7 +3,7 @@ import unittest
 import mock
 import redis
 
-import baseplate.clients.redis as baseplate_context_redis
+import baseplate.context.redis
 
 from reddit_service_activity.counter import ActivityCounter
 
@@ -17,7 +17,7 @@ class ActivityCounterTests(unittest.TestCase):
         mock_time.return_value = 1202
         mock_redis = mock.Mock(spec=redis.StrictRedis)
         pipeline = mock_redis.pipeline.return_value = mock.MagicMock(
-            spec=baseplate_context_redis.MonitoredRedisPipeline)
+            spec=baseplate.context.redis.MonitoredRedisPipeline)
         pipe = pipeline.__enter__.return_value
 
         self.counter.record_activity(mock_redis, "context", "visitor")
