@@ -46,4 +46,16 @@ jobs:
               print('import activity_thrift failed')
               traceback.print_exc()
           print('sys.path head:', sys.path[:12])
+          # Also print filesystem view of the package directory to help debug
+          pkg_dir = os.path.join(os.getcwd(), 'reddit_service_activity')
+          print('\n-- filesystem listing for', pkg_dir)
+          try:
+            for root, dirs, files in os.walk(pkg_dir):
+              print(root)
+              for d in dirs:
+                print('  dir:', d)
+              for f in files:
+                print('  file:', f)
+          except Exception as e:
+            print('listing failed:', e)
           PY
