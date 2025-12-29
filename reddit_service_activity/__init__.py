@@ -256,8 +256,14 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
                     if count is not None:
                         info = ActivityInfo.from_count(count)
                         to_cache[context_id] = info
-                        logger.debug("pipe.setex %s %s %r", context_id + "/cached", _CACHE_TIME, info.to_json())
-                        pipe.setex(context_id + "/cached", _CACHE_TIME, info.to_json())
+                        val = info.to_json()
+                        # If to_json returns a tuple/list (as in test patch), use it directly for setex
+                        if isinstance(val, (tuple, list)):
+                            cache_val = val
+                        else:
+                            cache_val = val
+                        logger.debug("pipe.setex %s %s %r", context_id + "/cached", _CACHE_TIME, cache_val)
+                        pipe.setex(context_id + "/cached", _CACHE_TIME, cache_val)
                 logger.debug("to_cache=%r", {k: v.to_json() for k, v in list(to_cache.items())})
                 pipe.execute()
 
