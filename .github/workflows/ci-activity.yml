@@ -106,8 +106,47 @@ jobs:
 
       - name: Generate thrift Python stubs
         run: |
+          # Find any .thrift files inside the installed baseplate package
+          THRIFT_INCLUDE_DIR=""
+          python - <<'PY'
+          import importlib, os
+          try:
+              bp = importlib.import_module('baseplate')
+              bp_root = os.path.dirname(bp.__file__)
+              thrift_files = []
+              for root, dirs, files in os.walk(bp_root):
+                  for f in files:
+                      if f.endswith('.thrift'):
+                          thrift_files.append(os.path.join(root, f))
+              if thrift_files:
+                  print(thrift_files[0])
+                  print('INCLUDE_DIR=' + os.path.dirname(thrift_files[0]))
+          except Exception as e:
+              print('baseplate thrift search failed:', e)
+              raise
+          PY
+          # read include from environment if python printed it
+          THRIFT_INCLUDE_DIR=$(python - <<'PY'
+import importlib, os, sys
+try:
+    bp = importlib.import_module('baseplate')
+    bp_root = os.path.dirname(bp.__file__)
+    for root, dirs, files in os.walk(bp_root):
+        for f in files:
+            if f.endswith('.thrift'):
+                print(os.path.dirname(os.path.join(root, f)))
+                sys.exit(0)
+except Exception:
+    pass
+print('')
+PY
+          if [ -z "$THRIFT_INCLUDE_DIR" ]; then
+            echo 'Could not find baseplate .thrift files installed; aborting thrift gen'
+            exit 1
+          fi
+          echo "Using thrift include dir: $THRIFT_INCLUDE_DIR"
           # Generate Python thrift bindings into reddit_service_activity/activity_thrift
-          thrift --gen py reddit_service_activity/activity.thrift
+          thrift -I $THRIFT_INCLUDE_DIR --gen py reddit_service_activity/activity.thrift
           rm -rf reddit_service_activity/activity_thrift || true
           mkdir -p reddit_service_activity/activity_thrift
           mv gen-py/* reddit_service_activity/activity_thrift/ || true

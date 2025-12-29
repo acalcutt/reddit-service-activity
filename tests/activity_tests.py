@@ -7,7 +7,7 @@ import baseplate.clients.redis as baseplate_context_redis
 
 import reddit_service_activity as activity
 from reddit_service_activity.counter import ActivityCounter
-from reddit_service_activity.activity_thrift import ActivityService
+from reddit_service_activity import activity_client as ActivityService
 
 
 class ActivityInfoTests(unittest.TestCase):

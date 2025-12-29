@@ -33,13 +33,14 @@ except Exception:
     except Exception:
         def tracing_client_from_config(app_config):
             return None
-from baseplate.frameworks.thrift import ThriftContextFactory
+from baseplate.clients.thrift import ThriftContextFactory
 from baseplate.integration.pyramid import BaseplateConfigurator
-from baseplate.lib.thrift_pool import ThriftConnectionPool
+from baseplate.lib.thrift_pool import thrift_pool_from_config
 from pyramid.config import Configurator
 from pyramid.httpexceptions import HTTPServiceUnavailable, HTTPNoContent
 
-from reddit_service_activity.activity_thrift import ActivityService
+from reddit_service_activity.activity_client import Client as ActivityServiceClient
+from reddit_service_activity import activity_client as ActivityService
 
 
 logger = logging.getLogger(__name__)
@@ -84,12 +85,15 @@ def make_wsgi_app(app_config):
         },
     })
 
-    pool = ThriftConnectionPool(cfg.activity.endpoint)
+    # Build a thrift connection pool from app config using the "activity." prefix
+    pool = thrift_pool_from_config(app_config, "activity.")
 
     baseplate = Baseplate(app_config)
     baseplate.configure_observers()
 
-    baseplate.add_to_context("activity", ThriftContextFactory(pool, ActivityService.Client))
+    # Register the thrift client proxy in the request context. Pass the
+    # generated-client class (or our local placeholder `ActivityServiceClient`).
+    baseplate.add_to_context("activity", ThriftContextFactory(pool, ActivityServiceClient))
 
     configurator = Configurator(settings=app_config)
 
