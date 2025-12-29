@@ -262,7 +262,7 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
                     if count is not None:
                         info = ActivityInfo.from_count(count)
                         to_cache[context_id] = info
-                logger.debug("to_cache=%r", {k: v.to_json() for k, v in to_cache.items()})
+                logger.debug("to_cache=%r", {k: v.to_json() for k, v in list(to_cache.items())})
 
                 if to_cache:
                     for context_id, info in list(to_cache.items()):
