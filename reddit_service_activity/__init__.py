@@ -8,22 +8,23 @@ import redis
 
 from baseplate import Baseplate
 from baseplate.lib import config
-from baseplate.lib.metrics import metrics_client_from_config
 
 # Prefer the new tracing factory in baseplate.observers.tracing, fall back
 # to the older helper in baseplate.lib.tracing if necessary.
 try:
     from baseplate.observers.tracing import make_client as _make_tracing_client
     from baseplate.lib import config as _bp_config
-
     def tracing_client_from_config(app_config):
-        cfg = _bp_config.parse_config(app_config, {
-            "tracing": {
-                "endpoint": _bp_config.Optional(_bp_config.Endpoint),
-                "service_name": _bp_config.Optional(_bp_config.String),
-                "queue_name": _bp_config.Optional(_bp_config.String),
-            }
-        })
+        cfg = _bp_config.parse_config(
+            app_config,
+            {
+                "tracing": {
+                    "endpoint": _bp_config.Optional(_bp_config.Endpoint),
+                    "service_name": _bp_config.Optional(_bp_config.String),
+                    "queue_name": _bp_config.Optional(_bp_config.String),
+                }
+            },
+        )
         service_name = cfg.tracing.service_name if cfg.tracing.service_name is not None else ""
         return _make_tracing_client(
             service_name,
@@ -36,7 +37,7 @@ except Exception:
     except Exception:
         def tracing_client_from_config(app_config):
             return None
-from baseplate.lib.error import error_reporter_from_config
+ 
 from baseplate.clients.redis import RedisContextFactory
 from baseplate.frameworks.thrift import baseplateify_processor
 

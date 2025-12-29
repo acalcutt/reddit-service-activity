@@ -3,7 +3,6 @@ import logging
 
 from baseplate import Baseplate
 from baseplate.lib import config
-from baseplate.lib.metrics import metrics_client_from_config
 
 # Prefer the new tracing factory in baseplate.observers.tracing, fall back
 # to the older helper in baseplate.lib.tracing if necessary.
@@ -12,13 +11,16 @@ try:
     from baseplate.lib import config as _bp_config
 
     def tracing_client_from_config(app_config):
-        cfg = _bp_config.parse_config(app_config, {
-            "tracing": {
-                "endpoint": _bp_config.Optional(_bp_config.Endpoint),
-                "service_name": _bp_config.Optional(_bp_config.String),
-                "queue_name": _bp_config.Optional(_bp_config.String),
-            }
-        })
+        cfg = _bp_config.parse_config(
+            app_config,
+            {
+                "tracing": {
+                    "endpoint": _bp_config.Optional(_bp_config.Endpoint),
+                    "service_name": _bp_config.Optional(_bp_config.String),
+                    "queue_name": _bp_config.Optional(_bp_config.String),
+                }
+            },
+        )
         service_name = cfg.tracing.service_name if cfg.tracing.service_name is not None else ""
         return _make_tracing_client(
             service_name,
