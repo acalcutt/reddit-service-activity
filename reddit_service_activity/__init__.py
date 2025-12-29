@@ -41,7 +41,14 @@ except Exception:
 from baseplate.clients.redis import RedisContextFactory
 from baseplate.frameworks.thrift import baseplateify_processor
 
-from .activity_thrift import ActivityService, ttypes
+try:
+    from .activity_thrift import ActivityService, ttypes
+except Exception:
+    try:
+        from reddit_service_activity.activity_thrift import ActivityService, ttypes
+    except Exception:
+        ActivityService = None
+        ttypes = None
 from .counter import ActivityCounter
 
 
