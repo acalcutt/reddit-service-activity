@@ -107,4 +107,6 @@ jobs:
       - name: Run tests
         working-directory: .
         run: |
-          pytest -q
+          # Tests are in the ./tests/ directory and use the legacy pattern '*_tests.py'.
+          # Use unittest discovery to run them reliably.
+          python -m unittest discover -s tests -p '*_tests.py'
