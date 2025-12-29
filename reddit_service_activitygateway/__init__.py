@@ -180,6 +180,18 @@ except Exception:
 ThriftConnectionPool = _ThriftConnectionPool
 
 
+# Context factory for the local placeholder client used when generated
+# Thrift stubs are not available. This mirrors Baseplate's expected
+# context-factory interface (callable that returns the context value).
+class ActivityContextFactory:
+    def __init__(self, client_cls):
+        self.client_cls = client_cls
+
+    def __call__(self, request):
+        # Instantiate a fresh client per-request to match ThriftContextFactory
+        return self.client_cls()
+
+
 class ActivityGateway(object):
     def is_healthy(self, request):
         try:

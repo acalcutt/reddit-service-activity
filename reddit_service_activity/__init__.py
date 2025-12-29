@@ -41,14 +41,31 @@ except Exception:
 from baseplate.clients.redis import RedisContextFactory
 from baseplate.frameworks.thrift import baseplateify_processor
 
+# Prefer generated Thrift stubs (generated into reddit_service_activity/activity_thrift)
+# if they exist; fall back to the local `activity_client` adapter otherwise.
 try:
-    from .activity_client import Client as ActivityServiceClient
-    from . import activity_client as ActivityService
-    ttypes = None
+    import importlib
+    # Try to import the generated thrift package and types
+    activity_thrift_pkg = importlib.import_module(__name__ + ".activity_thrift")
+    # The generated module usually exposes `ActivityService` and `ttypes`.
+    ActivityService = activity_thrift_pkg
+    try:
+        ActivityServiceClient = getattr(activity_thrift_pkg, "ActivityService").Client
+    except Exception:
+        ActivityServiceClient = None
+    try:
+        ttypes = importlib.import_module(__name__ + ".activity_thrift.ttypes")
+    except Exception:
+        ttypes = None
 except Exception:
-    ActivityService = None
-    ActivityServiceClient = None
-    ttypes = None
+    try:
+        from .activity_client import Client as ActivityServiceClient
+        from . import activity_client as ActivityService
+        ttypes = None
+    except Exception:
+        ActivityService = None
+        ActivityServiceClient = None
+        ttypes = None
 from .counter import ActivityCounter
 
 
