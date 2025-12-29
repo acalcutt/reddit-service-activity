@@ -35,7 +35,7 @@ except Exception:
             return None
 from baseplate.frameworks.thrift import ThriftContextFactory
 from baseplate.integration.pyramid import BaseplateConfigurator
-from baseplate.thrift_pool import ThriftConnectionPool
+from baseplate.lib.thrift_pool import ThriftConnectionPool
 from pyramid.config import Configurator
 from pyramid.httpexceptions import HTTPServiceUnavailable, HTTPNoContent
 
