@@ -8,11 +8,11 @@ import baseplate.clients.redis as baseplate_context_redis
 import reddit_service_activity as activity
 from reddit_service_activity.counter import ActivityCounter
 
-# Import thrift stubs if available, otherwise fall back to activity_client
+# Import InvalidContextIDException - try thrift stubs first, fall back to activity_client
 try:
-    from reddit_service_activity.activity_thrift import ActivityService
+    from reddit_service_activity.activity_thrift.ttypes import InvalidContextIDException
 except ImportError:
-    from reddit_service_activity import activity_client as ActivityService
+    from reddit_service_activity.activity_client import InvalidContextIDException
 
 
 class ActivityInfoTests(unittest.TestCase):
@@ -81,7 +81,7 @@ class ActivityServiceTests(unittest.TestCase):
         self.assertFalse(self.mock_counter.record_activity.called)
 
     def test_count_activity_bad_id(self):
-        with self.assertRaises(ActivityService.InvalidContextIDException):
+        with self.assertRaises(InvalidContextIDException):
             self.handler.count_activity(self.mock_context, "\\u2603")
 
     @mock.patch("reddit_service_activity.ActivityInfo", autospec=True)

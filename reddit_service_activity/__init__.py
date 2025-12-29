@@ -25,12 +25,21 @@ except ImportError:
 
 # Try to import generated Thrift stubs; provide fallbacks if not available
 try:
-    from .activity_thrift import ActivityService, ttypes
+    from .activity_thrift import ActivityService as ActivityServiceModule
+    from .activity_thrift import ttypes
+    # The thrift-generated service has Iface (not ContextIface) for the interface
+    # and Processor (not ContextProcessor) for the processor
     _HAS_THRIFT = True
+    _ServiceIface = getattr(ActivityServiceModule, 'Iface', None)
+    _ServiceProcessor = getattr(ActivityServiceModule, 'Processor', None)
+    _ThriftInvalidContextIDException = getattr(ttypes, 'InvalidContextIDException', None)
 except ImportError:
     _HAS_THRIFT = False
-    ActivityService = None
+    ActivityServiceModule = None
     ttypes = None
+    _ServiceIface = None
+    _ServiceProcessor = None
+    _ThriftInvalidContextIDException = None
 
 from .counter import ActivityCounter
 
@@ -98,15 +107,15 @@ else:
 from .activity_client import InvalidContextIDException
 
 # Use thrift exception if available, otherwise use our module-level exception
-if _HAS_THRIFT and ActivityService is not None:
-    _InvalidContextIDException = getattr(ActivityService, 'InvalidContextIDException', InvalidContextIDException)
+if _HAS_THRIFT and _ThriftInvalidContextIDException is not None:
+    _InvalidContextIDException = _ThriftInvalidContextIDException
 else:
     _InvalidContextIDException = InvalidContextIDException
 
 
 # Define Handler - inherit from thrift interface if available
-if _HAS_THRIFT and ActivityService is not None:
-    class Handler(ActivityService.ContextIface):
+if _HAS_THRIFT and _ServiceIface is not None:
+    class Handler(_ServiceIface):
         def __init__(self, counter):
             self.counter = counter
 
@@ -262,8 +271,8 @@ def make_processor(app_config):  # pragma: nocover
     counter = ActivityCounter(cfg.activity.window.total_seconds())
     handler = Handler(counter=counter)
 
-    if _HAS_THRIFT and ActivityService is not None:
-        processor = ActivityService.ContextProcessor(handler)
+    if _HAS_THRIFT and _ServiceProcessor is not None:
+        processor = _ServiceProcessor(handler)
         if baseplateify_processor is not None:
             processor = baseplateify_processor(processor, logger, baseplate)
         elif BaseplateProcessorEventHandler is not None:
