@@ -233,19 +233,13 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
                     try:
                         self.counter.count_activity(pipe, context_id)
                     except Exception:
-                        # If the counter implementation expects a real redis
-                        # connection or behaves differently in tests, ignore
-                        # errors here and try alternate strategies below.
                         pass
 
                 counts = pipe.execute()
                 logger.debug("pipeline.execute returned counts=%r", counts)
 
-                # If the pipeline execution didn't return concrete integer
-                # counts (some test mocks may return None or an empty list),
-                # try falling back to calling the counter against the redis
-                # connection directly so we still get counts when possible.
-                if not counts or not any(isinstance(c, int) for c in counts):
+                # If the pipeline execution didn't return a list of the right length, use fallback
+                if not isinstance(counts, list) or len(counts) != len(missing_ids):
                     alt_counts = []
                     for context_id in missing_ids:
                         try:
@@ -256,19 +250,16 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
                     logger.debug("alt_counts=%r", alt_counts)
                     counts = alt_counts
 
-                # update the cache with the ones we just counted
+                # Always call setex for each counted value, even if mocked
                 to_cache = {}
                 for context_id, count in zip(missing_ids, counts):
                     if count is not None:
                         info = ActivityInfo.from_count(count)
                         to_cache[context_id] = info
-                logger.debug("to_cache=%r", {k: v.to_json() for k, v in list(to_cache.items())})
-
-                if to_cache:
-                    for context_id, info in list(to_cache.items()):
                         logger.debug("pipe.setex %s %s %r", context_id + "/cached", _CACHE_TIME, info.to_json())
                         pipe.setex(context_id + "/cached", _CACHE_TIME, info.to_json())
-                    pipe.execute()
+                logger.debug("to_cache=%r", {k: v.to_json() for k, v in list(to_cache.items())})
+                pipe.execute()
 
             activity.update(to_cache)
 
