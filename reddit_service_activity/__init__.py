@@ -9,79 +9,30 @@ import redis
 from baseplate import Baseplate
 from baseplate.lib import config
 
-# Prefer the new tracing factory in baseplate.observers.tracing, fall back
-# to the older helper in baseplate.lib.tracing if necessary.
-try:
-    from baseplate.observers.tracing import make_client as _make_tracing_client
-    from baseplate.lib import config as _bp_config
-    def tracing_client_from_config(app_config):
-        cfg = _bp_config.parse_config(
-            app_config,
-            {
-                "tracing": {
-                    "endpoint": _bp_config.Optional(_bp_config.Endpoint),
-                    "service_name": _bp_config.Optional(_bp_config.String),
-                    "queue_name": _bp_config.Optional(_bp_config.String),
-                }
-            },
-        )
-        service_name = cfg.tracing.service_name if cfg.tracing.service_name is not None else ""
-        return _make_tracing_client(
-            service_name,
-            tracing_endpoint=cfg.tracing.endpoint,
-            tracing_queue_name=getattr(cfg.tracing, "queue_name", None),
-        )
-except Exception:
-    try:
-        from baseplate.lib.tracing import tracing_client_from_config
-    except Exception:
-        def tracing_client_from_config(app_config):
-            return None
- 
-from baseplate.clients.redis import RedisContextFactory, pool_from_config, RedisClient
-from baseplate.frameworks.thrift import baseplateify_processor
+# Import redis client utilities from new baseplate location
+from baseplate.clients.redis import RedisContextFactory, pool_from_config
 
-# Prefer generated Thrift stubs (generated into reddit_service_activity/activity_thrift)
-# if they exist; fall back to the local `activity_client` adapter otherwise.
+# Import thrift integration - try new location first, fall back to old
 try:
-    import importlib
-    # Try to import the generated thrift package and types
-    activity_thrift_pkg = importlib.import_module(__name__ + ".activity_thrift")
-    # The generated module usually exposes `ActivityService` and `ttypes`.
-    ActivityService = activity_thrift_pkg
+    from baseplate.frameworks.thrift import baseplateify_processor
+except ImportError:
     try:
-        ActivityServiceClient = getattr(activity_thrift_pkg, "ActivityService").Client
-    except Exception:
-        ActivityServiceClient = None
-    try:
-        ttypes = importlib.import_module(__name__ + ".activity_thrift.ttypes")
-    except Exception:
-        ttypes = None
-except Exception:
-    try:
-        from .activity_client import Client as ActivityServiceClient
-        from . import activity_client as ActivityService
-        # Also import the local activity_client module so we can raise its
-        # InvalidContextIDException in fallback paths consistently with tests.
-        try:
-            import importlib as _importlib
-            local_activity_client = _importlib.import_module(__name__ + ".activity_client")
-        except Exception:
-            local_activity_client = None
-        ttypes = None
-    except Exception:
-        ActivityService = None
-        ActivityServiceClient = None
-        ttypes = None
+        from baseplate.integration.thrift import BaseplateProcessorEventHandler
+        baseplateify_processor = None
+    except ImportError:
+        BaseplateProcessorEventHandler = None
+        baseplateify_processor = None
+
+# Try to import generated Thrift stubs; provide fallbacks if not available
+try:
+    from .activity_thrift import ActivityService, ttypes
+    _HAS_THRIFT = True
+except ImportError:
+    _HAS_THRIFT = False
+    ActivityService = None
+    ttypes = None
+
 from .counter import ActivityCounter
-
-# Ensure we have a reference to the local activity adapter module when
-# available so we can raise the same exception class object tests expect
-# even when generated Thrift stubs are absent.
-try:
-    from . import activity_client as local_activity_client
-except Exception:
-    local_activity_client = None
 
 
 logger = logging.getLogger(__name__)
@@ -89,63 +40,31 @@ _ID_RE = re.compile("^[A-Za-z0-9_]{,50}$")
 _CACHE_TIME = 30  # seconds
 
 
-_activityinfo_base = None
-if ttypes is not None:
-    _activityinfo_base = getattr(ttypes, "ActivityInfo", None)
+# Define ActivityInfo - extend thrift type if available, otherwise standalone
+if _HAS_THRIFT and ttypes is not None:
+    class ActivityInfo(ttypes.ActivityInfo):
+        @classmethod
+        def from_count(cls, count):
+            # keep a minimum jitter range of 5 for counts over 100
+            decay = math.exp(float(-min(count, 100)) / 60)
+            jitter = round(5 * decay)
+            return cls(count=count + random.randint(0, jitter), is_fuzzed=True)
 
-if _activityinfo_base:
-    try:
-        class ActivityInfo(_activityinfo_base):
-            @classmethod
-            def from_count(cls, count):
-                # Be tolerant of mocked/encoded counts by coercing to int.
-                try:
-                    c = int(count)
-                except Exception:
-                    c = 0
-                max_jitter = 5 if c > 100 else 4
-                return cls(count=c + random.randint(0, max_jitter), is_fuzzed=True)
+        def to_json(self):
+            return json.dumps(
+                {"count": self.count, "is_fuzzed": self.is_fuzzed},
+                sort_keys=True,
+            )
 
-            def to_json(self):
-                return json.dumps(
-                    {"count": self.count, "is_fuzzed": self.is_fuzzed},
-                    sort_keys=True,
-                )
-
-            @classmethod
-            def from_json(cls, value):
-                deserialized = json.loads(value)
-                return cls(
-                    count=deserialized["count"],
-                    is_fuzzed=deserialized["is_fuzzed"],
-                )
-    except Exception:
-        # If subclassing the generated type fails for any reason, fall back to
-        # a lightweight local implementation so imports don't blow up.
-        class ActivityInfo:
-            def __init__(self, count=0, is_fuzzed=False):
-                self.count = count
-                self.is_fuzzed = is_fuzzed
-
-            @classmethod
-            def from_count(cls, count):
-                try:
-                    c = int(count)
-                except Exception:
-                    c = 0
-                max_jitter = 5 if c > 100 else 4
-                return cls(count=c + random.randint(0, max_jitter), is_fuzzed=True)
-
-            def to_json(self):
-                return json.dumps({"count": self.count, "is_fuzzed": self.is_fuzzed}, sort_keys=True)
-
-            @classmethod
-            def from_json(cls, value):
-                if isinstance(value, (tuple, list)):
-                    return cls(count=value[0], is_fuzzed=value[1])
-                deserialized = json.loads(value)
-                return cls(count=deserialized.get("count", 0), is_fuzzed=deserialized.get("is_fuzzed", False))
+        @classmethod
+        def from_json(cls, value):
+            deserialized = json.loads(value)
+            return cls(
+                count=deserialized["count"],
+                is_fuzzed=deserialized["is_fuzzed"],
+            )
 else:
+    # Standalone ActivityInfo when thrift stubs are not available
     class ActivityInfo:
         def __init__(self, count=0, is_fuzzed=False):
             self.count = count
@@ -153,25 +72,40 @@ else:
 
         @classmethod
         def from_count(cls, count):
-            try:
-                c = int(count)
-            except Exception:
-                c = 0
-            max_jitter = 5 if c > 100 else 4
-            return cls(count=c + random.randint(0, max_jitter), is_fuzzed=True)
+            # keep a minimum jitter range of 5 for counts over 100
+            decay = math.exp(float(-min(count, 100)) / 60)
+            jitter = round(5 * decay)
+            return cls(count=count + random.randint(0, jitter), is_fuzzed=True)
 
         def to_json(self):
-            return json.dumps({"count": self.count, "is_fuzzed": self.is_fuzzed}, sort_keys=True)
+            return json.dumps(
+                {"count": self.count, "is_fuzzed": self.is_fuzzed},
+                sort_keys=True,
+            )
 
         @classmethod
         def from_json(cls, value):
             if isinstance(value, (tuple, list)):
                 return cls(count=value[0], is_fuzzed=value[1])
             deserialized = json.loads(value)
-            return cls(count=deserialized.get("count", 0), is_fuzzed=deserialized.get("is_fuzzed", False))
+            return cls(
+                count=deserialized["count"],
+                is_fuzzed=deserialized["is_fuzzed"],
+            )
 
 
-if ActivityService is not None and getattr(ActivityService, "ContextIface", None) is not None:
+# Provide InvalidContextIDException - use from activity_client for consistency with tests
+from .activity_client import InvalidContextIDException
+
+# Use thrift exception if available, otherwise use our module-level exception
+if _HAS_THRIFT and ActivityService is not None:
+    _InvalidContextIDException = getattr(ActivityService, 'InvalidContextIDException', InvalidContextIDException)
+else:
+    _InvalidContextIDException = InvalidContextIDException
+
+
+# Define Handler - inherit from thrift interface if available
+if _HAS_THRIFT and ActivityService is not None:
     class Handler(ActivityService.ContextIface):
         def __init__(self, counter):
             self.counter = counter
@@ -194,140 +128,113 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
                 return {}
 
             if not all(_ID_RE.match(context_id) for context_id in context_ids):
-                # Prefer the generated thrift exception type when available,
-                # otherwise raise the local activity_client exception expected
-                # by tests.
-                if ActivityService is not None and getattr(ActivityService, "InvalidContextIDException", None) is not None:
-                    raise ActivityService.InvalidContextIDException
-                if local_activity_client is not None and getattr(local_activity_client, 'InvalidContextIDException', None):
-                    raise local_activity_client.InvalidContextIDException
-                raise ValueError("invalid context id")
+                raise _InvalidContextIDException()
 
             activity = {}
 
             # read cached activity
             cache_keys = [context_id + "/cached" for context_id in context_ids]
             cached_info = context.redis.mget(cache_keys)
-            logger.debug("cache_keys=%s cached_info=%r", cache_keys, cached_info)
             for context_id, cached_value in zip(context_ids, cached_info):
                 if cached_value is None:
                     continue
-                # redis returns bytes; be tolerant of str or bytes
+                # Handle both bytes and string values from redis
                 if hasattr(cached_value, 'decode'):
-                    val = cached_value.decode()
-                else:
-                    val = cached_value
-                activity[context_id] = ActivityInfo.from_json(val)
+                    cached_value = cached_value.decode()
+                activity[context_id] = ActivityInfo.from_json(cached_value)
 
             # count any ones that were not cached
             missing_ids = [id_ for id_ in context_ids if id_ not in activity]
-            logger.debug("missing_ids=%s", missing_ids)
             if not missing_ids:
                 return activity
 
-            # Use a single pipeline for counting and caching so tests that
-            # mock the pipeline observe both the count and the subsequent
-            # setex calls on the same object.
-            with context.redis.pipeline() as pipe:
+            # First pipeline: count activity
+            with context.redis.pipeline("count", transaction=False) as pipe:
                 for context_id in missing_ids:
-                    try:
-                        self.counter.count_activity(pipe, context_id)
-                    except Exception:
-                        pass
-
+                    self.counter.count_activity(pipe, context_id)
                 counts = pipe.execute()
-                logger.debug("pipeline.execute returned counts=%r", counts)
 
-                # If the pipeline execution didn't return a list of the right length, use fallback
-                if not isinstance(counts, list) or len(counts) != len(missing_ids):
-                    alt_counts = []
-                    for context_id in missing_ids:
-                        try:
-                            alt = self.counter.count_activity(context.redis, context_id)
-                        except Exception:
-                            alt = None
-                        alt_counts.append(alt)
-                    logger.debug("alt_counts=%r", alt_counts)
-                    counts = alt_counts
-
-                # Always call setex for each counted value, even if mocked
-                to_cache = {}
-                for context_id, count in zip(missing_ids, counts):
-                    if count is not None:
-                        info = ActivityInfo.from_count(count)
-                        to_cache[context_id] = info
-                        val = info.to_json()
-                        # If to_json returns a tuple/list (as in test patch), use it directly for setex
-                        if isinstance(val, (tuple, list)):
-                            cache_val = val
-                        else:
-                            cache_val = val
-                        logger.debug("pipe.setex %s %s %r", context_id + "/cached", _CACHE_TIME, cache_val)
-                        pipe.setex(context_id + "/cached", _CACHE_TIME, cache_val)
-                logger.debug("to_cache=%r", {k: v.to_json() for k, v in list(to_cache.items())})
-                pipe.execute()
-
+            # update the cache with the ones we just counted
+            to_cache = {}
+            for context_id, count in zip(missing_ids, counts):
+                if count is not None:
+                    info = ActivityInfo.from_count(count)
+                    to_cache[context_id] = info
             activity.update(to_cache)
+
+            # Second pipeline: cache results
+            if to_cache:
+                with context.redis.pipeline("cache", transaction=False) as pipe:
+                    for context_id, info in to_cache.items():
+                        pipe.setex(context_id + "/cached", _CACHE_TIME, info.to_json())
+                    pipe.execute()
 
             return activity
 else:
-    # ActivityService generated Thrift module is missing; provide a minimal
-    # Handler fallback so importing this package doesn't fail in CI. The
-    # fallback methods are compatible with tests that only import the package
-    # but do not actually run RPC plumbing.
+    # Fallback Handler when thrift stubs are not available
     class Handler:
         def __init__(self, counter):
             self.counter = counter
 
         def is_healthy(self, context):
-            # best-effort: try to ping redis if available
-            try:
-                return context.redis.ping()
-            except Exception:
-                return False
+            return context.redis.ping()
 
         def record_activity(self, context, context_id, visitor_id):
             if not _ID_RE.match(context_id) or not _ID_RE.match(visitor_id):
                 return
-            try:
-                self.counter.record_activity(context.redis, context_id, visitor_id)
-            except Exception:
-                # swallow; this fallback is only to allow imports
-                return
+
+            self.counter.record_activity(context.redis, context_id, visitor_id)
 
         def count_activity(self, context, context_id):
-            return self.count_activity_multi(context, [context_id])[context_id]
+            results = self.count_activity_multi(context, [context_id])
+            return results[context_id]
 
         def count_activity_multi(self, context, context_ids):
             if not context_ids:
                 return {}
 
             if not all(_ID_RE.match(context_id) for context_id in context_ids):
-                if ActivityService is not None and getattr(ActivityService, "InvalidContextIDException", None) is not None:
-                    raise ActivityService.InvalidContextIDException
-                if local_activity_client is not None and getattr(local_activity_client, 'InvalidContextIDException', None):
-                    raise local_activity_client.InvalidContextIDException
-                raise ValueError("invalid context id")
+                raise _InvalidContextIDException()
 
-            # best-effort: try to fetch cache values, otherwise return zeros
             activity = {}
-            try:
-                cache_keys = [context_id + "/cached" for context_id in context_ids]
-                cached_info = context.redis.mget(cache_keys)
-                for context_id, cached_value in zip(context_ids, cached_info):
-                    if cached_value is None:
-                        continue
-                    # redis returns bytes; be tolerant of str or bytes
-                    if hasattr(cached_value, "decode"):
-                        val = cached_value.decode()
-                    else:
-                        val = cached_value
-                    activity[context_id] = ActivityInfo.from_json(val)
-            except Exception:
-                pass
 
-            for id_ in context_ids:
-                activity.setdefault(id_, ActivityInfo.from_count(0))
+            # read cached activity
+            cache_keys = [context_id + "/cached" for context_id in context_ids]
+            cached_info = context.redis.mget(cache_keys)
+            for context_id, cached_value in zip(context_ids, cached_info):
+                if cached_value is None:
+                    continue
+                # Handle both bytes and string values from redis
+                if hasattr(cached_value, 'decode'):
+                    cached_value = cached_value.decode()
+                activity[context_id] = ActivityInfo.from_json(cached_value)
+
+            # count any ones that were not cached
+            missing_ids = [id_ for id_ in context_ids if id_ not in activity]
+            if not missing_ids:
+                return activity
+
+            # First pipeline: count activity
+            with context.redis.pipeline("count", transaction=False) as pipe:
+                for context_id in missing_ids:
+                    self.counter.count_activity(pipe, context_id)
+                counts = pipe.execute()
+
+            # update the cache with the ones we just counted
+            to_cache = {}
+            for context_id, count in zip(missing_ids, counts):
+                if count is not None:
+                    info = ActivityInfo.from_count(count)
+                    to_cache[context_id] = info
+            activity.update(to_cache)
+
+            # Second pipeline: cache results
+            if to_cache:
+                with context.redis.pipeline("cache", transaction=False) as pipe:
+                    for context_id, info in to_cache.items():
+                        pipe.setex(context_id + "/cached", _CACHE_TIME, info.to_json())
+                    pipe.execute()
+
             return activity
 
 
@@ -346,16 +253,6 @@ def make_processor(app_config):  # pragma: nocover
         },
     })
 
-    # Build a redis connection pool from config using baseplate helper
-    # (prefix matches the config keys set in the tests / app config).
-    # Allow baseplate's config helper to process redis-related config keys
-    try:
-        baseplate.configure_context(app_config, {"redis": RedisClient()})
-    except Exception:
-        # Older baseplate versions or minimal installs may not provide
-        # `configure_context`; ignore errors and fall back to manual pool.
-        pass
-
     redis_pool = pool_from_config(app_config, prefix="redis.")
 
     baseplate = Baseplate(app_config)
@@ -364,12 +261,14 @@ def make_processor(app_config):  # pragma: nocover
 
     counter = ActivityCounter(cfg.activity.window.total_seconds())
     handler = Handler(counter=counter)
-    # If the generated Thrift ContextProcessor is available, use it and wrap
-    # with baseplate's thrift instrumentation. Otherwise return the handler
-    # itself as a lightweight fallback (tests call handler methods directly).
-    if ActivityService is not None and getattr(ActivityService, "ContextProcessor", None) is not None:
+
+    if _HAS_THRIFT and ActivityService is not None:
         processor = ActivityService.ContextProcessor(handler)
-        processor = baseplateify_processor(processor, logger, baseplate)
+        if baseplateify_processor is not None:
+            processor = baseplateify_processor(processor, logger, baseplate)
+        elif BaseplateProcessorEventHandler is not None:
+            event_handler = BaseplateProcessorEventHandler(logger, baseplate)
+            processor.setEventHandler(event_handler)
         return processor
 
     return handler
