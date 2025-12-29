@@ -211,6 +211,9 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
             if not missing_ids:
                 return activity
 
+            # Use a single pipeline for counting and caching so tests that
+            # mock the pipeline observe both the count and the subsequent
+            # setex calls on the same object.
             with context.redis.pipeline() as pipe:
                 for context_id in missing_ids:
                     try:
@@ -220,35 +223,36 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
                         # connection or behaves differently in tests, ignore
                         # errors here and try alternate strategies below.
                         pass
+
                 counts = pipe.execute()
 
-            # If the pipeline execution didn't return concrete integer counts
-            # (some test mocks may return None or an empty list), try falling
-            # back to calling the counter against the redis connection
-            # directly so we still get counts when possible.
-            if not counts or not any(isinstance(c, int) for c in counts):
-                alt_counts = []
-                for context_id in missing_ids:
-                    try:
-                        alt = self.counter.count_activity(context.redis, context_id)
-                    except Exception:
-                        alt = None
-                    alt_counts.append(alt)
-                counts = alt_counts
+                # If the pipeline execution didn't return concrete integer
+                # counts (some test mocks may return None or an empty list),
+                # try falling back to calling the counter against the redis
+                # connection directly so we still get counts when possible.
+                if not counts or not any(isinstance(c, int) for c in counts):
+                    alt_counts = []
+                    for context_id in missing_ids:
+                        try:
+                            alt = self.counter.count_activity(context.redis, context_id)
+                        except Exception:
+                            alt = None
+                        alt_counts.append(alt)
+                    counts = alt_counts
 
-            # update the cache with the ones we just counted
-            to_cache = {}
-            for context_id, count in zip(missing_ids, counts):
-                if count is not None:
-                    info = ActivityInfo.from_count(count)
-                    to_cache[context_id] = info
-            activity.update(to_cache)
+                # update the cache with the ones we just counted
+                to_cache = {}
+                for context_id, count in zip(missing_ids, counts):
+                    if count is not None:
+                        info = ActivityInfo.from_count(count)
+                        to_cache[context_id] = info
 
-            if to_cache:
-                with context.redis.pipeline() as pipe:
+                if to_cache:
                     for context_id, info in list(to_cache.items()):
                         pipe.setex(context_id + "/cached", _CACHE_TIME, info.to_json())
                     pipe.execute()
+
+            activity.update(to_cache)
 
             return activity
 else:
