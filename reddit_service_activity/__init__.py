@@ -203,7 +203,7 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
             if not missing_ids:
                 return activity
 
-            with context.redis.pipeline("count", transaction=False) as pipe:
+            with context.redis.pipeline() as pipe:
                 for context_id in missing_ids:
                     self.counter.count_activity(pipe, context_id)
                 counts = pipe.execute()
@@ -217,7 +217,7 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
             activity.update(to_cache)
 
             if to_cache:
-                with context.redis.pipeline("cache", transaction=False) as pipe:
+                with context.redis.pipeline() as pipe:
                     for context_id, info in list(to_cache.items()):
                         pipe.setex(context_id + "/cached", _CACHE_TIME, info.to_json())
                     pipe.execute()

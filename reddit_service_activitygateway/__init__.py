@@ -212,6 +212,11 @@ class ActivityContextFactory:
 
         return _forward
 
+    def make_object_for_context(self, full_name, span):
+        # Baseplate expects context factories to implement this method when
+        # creating context-scoped objects. Return a fresh client instance.
+        return self.client_cls()
+
 
 class ActivityGateway(object):
     def is_healthy(self, request):
