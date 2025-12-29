@@ -148,21 +148,14 @@ def make_processor(app_config):  # pragma: nocover
         },
     })
 
-    metrics_client = metrics_client_from_config(app_config)
-    tracing_client = tracing_client_from_config(app_config)
-    error_reporter = error_reporter_from_config(app_config, __name__)
     redis_pool = redis.BlockingConnectionPool.from_url(
         cfg.redis.url,
         max_connections=cfg.redis.max_connections,
         timeout=0.1,
     )
 
-    baseplate = Baseplate()
-    baseplate.configure_logging()
-    baseplate.configure_metrics(metrics_client)
-    if tracing_client is not None:
-        baseplate.configure_tracing(tracing_client)
-    baseplate.configure_error_reporting(error_reporter)
+    baseplate = Baseplate(app_config)
+    baseplate.configure_observers()
     baseplate.add_to_context("redis", RedisContextFactory(redis_pool))
 
     counter = ActivityCounter(cfg.activity.window.total_seconds())

@@ -82,19 +82,12 @@ def make_wsgi_app(app_config):
         },
     })
 
-    metrics_client = metrics_client_from_config(app_config)
-
     pool = ThriftConnectionPool(cfg.activity.endpoint)
 
-    baseplate = Baseplate()
-    baseplate.configure_logging()
-    baseplate.configure_metrics(metrics_client)
-    tracing_client = tracing_client_from_config(app_config)
-    if tracing_client is not None:
-        baseplate.configure_tracing(tracing_client)
+    baseplate = Baseplate(app_config)
+    baseplate.configure_observers()
 
-    baseplate.add_to_context("activity",
-                             ThriftContextFactory(pool, ActivityService.Client))
+    baseplate.add_to_context("activity", ThriftContextFactory(pool, ActivityService.Client))
 
     configurator = Configurator(settings=app_config)
 
