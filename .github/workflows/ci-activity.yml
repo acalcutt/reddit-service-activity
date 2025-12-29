@@ -1,0 +1,82 @@
+name: CI — reddit-service-activity
+
+on:
+  push:
+    paths:
+      - 'reddit-service-activity/**'
+  pull_request:
+    paths:
+      - 'reddit-service-activity/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.10, 3.12]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install pip
+        run: python -m pip install --upgrade pip
+
+      - name: 2to3 dry-run check (lib2to3)
+        run: |
+          python - <<'PY'
+          from lib2to3.refactor import RefactoringTool, get_fixers_from_package
+          import difflib, pathlib, sys
+
+          fixers = get_fixers_from_package('lib2to3.fixes')
+          tool = RefactoringTool(fixers)
+
+          changed = False
+          for p in pathlib.Path('reddit-service-activity').rglob('*.py'):
+              src = p.read_text()
+              tree = tool.refactor_string(src, str(p))
+              new = str(tree)
+              if new != src:
+                  changed = True
+                  print('====', p)
+                  for line in difflib.unified_diff(src.splitlines(), new.splitlines(), fromfile=str(p), tofile=str(p) + ' (2to3)', lineterm=''):
+                      print(line)
+
+          if changed:
+              print('\n2to3 would modify the files above — please port to Python 3 or update code.\n')
+              sys.exit(2)
+          print('2to3: no changes')
+          PY
+
+      - name: Syntax check (py_compile)
+        run: |
+          python -m pip install --upgrade setuptools
+          python - <<'PY'
+          import py_compile, pathlib, sys
+          errors = 0
+          for p in pathlib.Path('reddit-service-activity').rglob('*.py'):
+              try:
+                  py_compile.compile(str(p), doraise=True)
+              except Exception as e:
+                  print('py_compile failed:', p, e)
+                  errors += 1
+          if errors:
+              sys.exit(1)
+          print('py_compile OK')
+          PY
+
+      - name: Install package and test deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e reddit-service-activity
+          python -m pip install pytest
+
+      - name: Run tests
+        working-directory: reddit-service-activity
+        run: |
+          pytest -q

@@ -1,7 +1,10 @@
 import hashlib
 import logging
 
-from baseplate import Baseplate, make_metrics_client, config
+from baseplate import Baseplate
+from baseplate.lib import config
+from baseplate.lib.metrics import metrics_client_from_config
+from baseplate.lib.tracing import tracing_client_from_config
 from baseplate.context.thrift import ThriftContextFactory
 from baseplate.integration.pyramid import BaseplateConfigurator
 from baseplate.thrift_pool import ThriftConnectionPool
@@ -53,17 +56,15 @@ def make_wsgi_app(app_config):
         },
     })
 
-    metrics_client = make_metrics_client(app_config)
+    metrics_client = metrics_client_from_config(app_config)
 
     pool = ThriftConnectionPool(cfg.activity.endpoint)
 
     baseplate = Baseplate()
     baseplate.configure_logging()
     baseplate.configure_metrics(metrics_client)
-    baseplate.configure_tracing(
-        cfg.tracing.service_name,
-        cfg.tracing.endpoint,
-    )
+    tracing_client = tracing_client_from_config(app_config)
+    baseplate.configure_tracing(tracing_client)
 
     baseplate.add_to_context("activity",
                              ThriftContextFactory(pool, ActivityService.Client))

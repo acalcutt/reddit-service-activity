@@ -6,13 +6,11 @@ import re
 
 import redis
 
-from baseplate import (
-    Baseplate,
-    config,
-    error_reporter_from_config,
-    metrics_client_from_config,
-    tracing_client_from_config,
-)
+from baseplate import Baseplate
+from baseplate.lib import config
+from baseplate.lib.metrics import metrics_client_from_config
+from baseplate.lib.tracing import tracing_client_from_config
+from baseplate.lib.error import error_reporter_from_config
 from baseplate.context.redis import RedisContextFactory
 from baseplate.integration.thrift import BaseplateProcessorEventHandler
 
