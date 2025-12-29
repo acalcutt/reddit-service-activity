@@ -1,12 +1,8 @@
-name: CI - reddit-service-activity
+name: CI
 
 on:
   push:
-    paths:
-      - 'reddit-service-activity/**'
   pull_request:
-    paths:
-      - 'reddit-service-activity/**'
 
 jobs:
   test:
