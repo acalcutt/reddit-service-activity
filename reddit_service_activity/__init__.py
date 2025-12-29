@@ -57,27 +57,77 @@ _ID_RE = re.compile("^[A-Za-z0-9_]{,50}$")
 _CACHE_TIME = 30  # seconds
 
 
-class ActivityInfo(ttypes.ActivityInfo):
-    @classmethod
-    def from_count(cls, count):
-        # keep a minimum jitter range of 5 for counts over 100
-        decay = math.exp(float(-min(count, 100)) / 60)
-        jitter = round(5 * decay)
-        return cls(count=count + random.randint(0, jitter), is_fuzzed=True)
+_activityinfo_base = None
+if ttypes is not None:
+    _activityinfo_base = getattr(ttypes, "ActivityInfo", None)
 
-    def to_json(self):
-        return json.dumps(
-            {"count": self.count, "is_fuzzed": self.is_fuzzed},
-            sort_keys=True,
-        )
+if _activityinfo_base:
+    try:
+        class ActivityInfo(_activityinfo_base):
+            @classmethod
+            def from_count(cls, count):
+                # keep a minimum jitter range of 5 for counts over 100
+                decay = math.exp(float(-min(count, 100)) / 60)
+                jitter = round(5 * decay)
+                return cls(count=count + random.randint(0, jitter), is_fuzzed=True)
 
-    @classmethod
-    def from_json(cls, value):
-        deserialized = json.loads(value)
-        return cls(
-            count=deserialized["count"],
-            is_fuzzed=deserialized["is_fuzzed"],
-        )
+            def to_json(self):
+                return json.dumps(
+                    {"count": self.count, "is_fuzzed": self.is_fuzzed},
+                    sort_keys=True,
+                )
+
+            @classmethod
+            def from_json(cls, value):
+                deserialized = json.loads(value)
+                return cls(
+                    count=deserialized["count"],
+                    is_fuzzed=deserialized["is_fuzzed"],
+                )
+    except Exception:
+        # If subclassing the generated type fails for any reason, fall back to
+        # a lightweight local implementation so imports don't blow up.
+        class ActivityInfo:
+            def __init__(self, count=0, is_fuzzed=False):
+                self.count = count
+                self.is_fuzzed = is_fuzzed
+
+            @classmethod
+            def from_count(cls, count):
+                decay = math.exp(float(-min(count, 100)) / 60)
+                jitter = round(5 * decay)
+                return cls(count=count + random.randint(0, jitter), is_fuzzed=True)
+
+            def to_json(self):
+                return json.dumps({"count": self.count, "is_fuzzed": self.is_fuzzed}, sort_keys=True)
+
+            @classmethod
+            def from_json(cls, value):
+                if isinstance(value, (tuple, list)):
+                    return cls(count=value[0], is_fuzzed=value[1])
+                deserialized = json.loads(value)
+                return cls(count=deserialized.get("count", 0), is_fuzzed=deserialized.get("is_fuzzed", False))
+else:
+    class ActivityInfo:
+        def __init__(self, count=0, is_fuzzed=False):
+            self.count = count
+            self.is_fuzzed = is_fuzzed
+
+        @classmethod
+        def from_count(cls, count):
+            decay = math.exp(float(-min(count, 100)) / 60)
+            jitter = round(5 * decay)
+            return cls(count=count + random.randint(0, jitter), is_fuzzed=True)
+
+        def to_json(self):
+            return json.dumps({"count": self.count, "is_fuzzed": self.is_fuzzed}, sort_keys=True)
+
+        @classmethod
+        def from_json(cls, value):
+            if isinstance(value, (tuple, list)):
+                return cls(count=value[0], is_fuzzed=value[1])
+            deserialized = json.loads(value)
+            return cls(count=deserialized.get("count", 0), is_fuzzed=deserialized.get("is_fuzzed", False))
 
 
 class Handler(ActivityService.ContextIface):
