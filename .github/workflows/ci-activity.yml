@@ -106,33 +106,10 @@ jobs:
 
       - name: Generate thrift Python stubs
         run: |
-          # Find any .thrift files inside the installed baseplate package
-          THRIFT_INCLUDE_DIR=""
-          python - <<'PY'
-          import importlib, os
-          try:
-              bp = importlib.import_module('baseplate')
-              bp_root = os.path.dirname(bp.__file__)
-              thrift_files = []
-              for root, dirs, files in os.walk(bp_root):
-                  for f in files:
-                      if f.endswith('.thrift'):
-                          thrift_files.append(os.path.join(root, f))
-              if thrift_files:
-                  print(thrift_files[0])
-                  print('INCLUDE_DIR=' + os.path.dirname(thrift_files[0]))
-          except Exception as e:
-              print('baseplate thrift search failed:', e)
-              raise
-          PY
-          # read include from environment if python printed it
-              THRIFT_INCLUDE_DIR=$(python -c "import importlib,os,sys;\
-        try:\
-          bp=importlib.import_module('baseplate'); bp_root=os.path.dirname(bp.__file__);\
-          p=next((os.path.dirname(os.path.join(r,f)) for r,d,fs in os.walk(bp_root) for f in fs if f.endswith('.thrift')), '');\
-          print(p)\
-        except Exception:\
-          print('')")
+          # Discover baseplate .thrift include directory and set THRIFT_INCLUDE_DIR
+          THRIFT_INCLUDE_DIR=$(python -c "import importlib,os;\
+bp=importlib.import_module('baseplate'); bp_root=os.path.dirname(bp.__file__);\
+print(next((os.path.dirname(os.path.join(r,f)) for r,d,files in os.walk(bp_root) for f in files if f.endswith('.thrift')), ''))")
           if [ -z "$THRIFT_INCLUDE_DIR" ]; then
             echo 'Could not find baseplate .thrift files installed; aborting thrift gen'
             exit 1
