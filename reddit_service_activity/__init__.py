@@ -38,7 +38,7 @@ except Exception:
         def tracing_client_from_config(app_config):
             return None
  
-from baseplate.clients.redis import RedisContextFactory, pool_from_config
+from baseplate.clients.redis import RedisContextFactory, pool_from_config, RedisClient
 from baseplate.frameworks.thrift import baseplateify_processor
 
 # Prefer generated Thrift stubs (generated into reddit_service_activity/activity_thrift)
@@ -309,6 +309,14 @@ def make_processor(app_config):  # pragma: nocover
 
     # Build a redis connection pool from config using baseplate helper
     # (prefix matches the config keys set in the tests / app config).
+    # Allow baseplate's config helper to process redis-related config keys
+    try:
+        baseplate.configure_context(app_config, {"redis": RedisClient()})
+    except Exception:
+        # Older baseplate versions or minimal installs may not provide
+        # `configure_context`; ignore errors and fall back to manual pool.
+        pass
+
     redis_pool = pool_from_config(app_config, prefix="redis.")
 
     baseplate = Baseplate(app_config)
