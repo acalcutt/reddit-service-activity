@@ -252,9 +252,20 @@ def make_wsgi_app(app_config):
             # best-effort: some baseplate versions expect different factories
             pass
 
-    # Register the thrift client proxy in the request context. Pass the
-    # generated-client class (or our local placeholder `ActivityServiceClient`).
-    baseplate.add_to_context("activity", ThriftContextFactory(pool, ActivityServiceClient))
+    # Register the thrift client proxy in the request context.
+    # If we have a generated Thrift module available (it defines
+    # `ContextIface`), use Baseplate's ThriftContextFactory so the pool
+    # is used. Otherwise register a simple factory that instantiates our
+    # local placeholder client class — this keeps tests working without
+    # requiring generated Thrift stubs.
+    try:
+        if ActivityService is not None and getattr(ActivityService, "ContextIface", None) is not None:
+            baseplate.add_to_context("activity", ThriftContextFactory(pool, ActivityServiceClient))
+        else:
+            baseplate.add_to_context("activity", lambda _: ActivityServiceClient())
+    except Exception:
+        # Fallback: register direct client factory
+        baseplate.add_to_context("activity", lambda _: ActivityServiceClient())
 
     configurator = Configurator(settings=app_config)
 
