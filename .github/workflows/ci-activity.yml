@@ -33,7 +33,35 @@ jobs:
 
       - name: Install CI requirements
         run: |
-          python -m pip install -r requirements.txt
+          python -m pip install -r reddit-service-activity/requirements-ci.txt
+          python -m pip show packaging setuptools || true
+          python -c "import packaging, setuptools; print('packaging', packaging.__version__); print('setuptools', setuptools.__version__)"
+          # Re-assert modern packaging in case a pinned dependency downgraded it.
+          python -m pip install --force-reinstall --no-deps 'packaging>=23.1'
+
+      - name: Debug pip / setuptools environment
+        run: |
+          python -m pip --version
+          echo '--- pip list ---'
+          python -m pip list --format=columns
+          echo '--- pip freeze ---'
+          python -m pip freeze
+          echo '--- pip show setuptools packaging (and suspect packages) ---'
+          python -m pip show setuptools packaging formenergy-observability || true
+          echo '--- pip check (dependency conflicts) ---'
+          python -m pip check || true
+          echo '--- pip debug (verbose) ---'
+          python -m pip debug --verbose || true
+          python - <<'PY'
+import setuptools, packaging, sys
+print('setuptools:', getattr(setuptools,'__version__',None))
+print('packaging :', getattr(packaging,'__version__',None))
+try:
+    import importlib.metadata as md
+    print('metadata setuptools version:', md.distribution('setuptools').version)
+except Exception as e:
+    print('metadata setuptools lookup failed:', e)
+PY
 
       - name: 2to3 dry-run check (lib2to3)
         run: |
