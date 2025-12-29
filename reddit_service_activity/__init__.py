@@ -231,7 +231,7 @@ else:
             # Second pipeline: cache results
             if to_cache:
                 with context.redis.pipeline("cache", transaction=False) as pipe:
-                    for context_id, info in to_cache.items():
+                    for context_id, info in list(to_cache.items()):
                         pipe.setex(context_id + "/cached", _CACHE_TIME, info.to_json())
                     pipe.execute()
 
