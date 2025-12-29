@@ -52,16 +52,7 @@ jobs:
           python -m pip check || true
           echo '--- pip debug (verbose) ---'
           python -m pip debug --verbose || true
-            python - <<'PY'
-            import setuptools, packaging, sys
-            print('setuptools:', getattr(setuptools,'__version__',None))
-            print('packaging :', getattr(packaging,'__version__',None))
-            try:
-              import importlib.metadata as md
-              print('metadata setuptools version:', md.distribution('setuptools').version)
-            except Exception as e:
-              print('metadata setuptools lookup failed:', e)
-            PY
+          python -c "import setuptools, packaging; print('setuptools:', getattr(setuptools,'__version__',None)); print('packaging :', getattr(packaging,'__version__',None))"
 
       - name: 2to3 dry-run check (lib2to3)
         run: |
