@@ -5,7 +5,7 @@ from baseplate import Baseplate
 from baseplate.lib import config
 from baseplate.lib.metrics import metrics_client_from_config
 from baseplate.lib.tracing import tracing_client_from_config
-from baseplate.context.thrift import ThriftContextFactory
+from baseplate.frameworks.thrift import ThriftContextFactory
 from baseplate.integration.pyramid import BaseplateConfigurator
 from baseplate.thrift_pool import ThriftConnectionPool
 from pyramid.config import Configurator

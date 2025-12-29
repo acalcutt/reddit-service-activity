@@ -11,7 +11,7 @@ from baseplate.lib import config
 from baseplate.lib.metrics import metrics_client_from_config
 from baseplate.lib.tracing import tracing_client_from_config
 from baseplate.lib.error import error_reporter_from_config
-from baseplate.context.redis import RedisContextFactory
+from baseplate.clients.redis import RedisContextFactory
 from baseplate.frameworks.thrift import baseplateify_processor
 
 from .activity_thrift import ActivityService, ttypes
