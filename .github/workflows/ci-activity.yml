@@ -34,7 +34,7 @@ jobs:
           tool = RefactoringTool(fixers)
 
           changed = False
-          for p in pathlib.Path('reddit-service-activity').rglob('*.py'):
+          for p in pathlib.Path('.').rglob('*.py'):
               src = p.read_text()
               tree = tool.refactor_string(src, str(p))
               new = str(tree)
@@ -56,7 +56,7 @@ jobs:
           python - <<'PY'
           import py_compile, pathlib, sys
           errors = 0
-          for p in pathlib.Path('reddit-service-activity').rglob('*.py'):
+          for p in pathlib.Path('.').rglob('*.py'):
               try:
                   py_compile.compile(str(p), doraise=True)
               except Exception as e:
