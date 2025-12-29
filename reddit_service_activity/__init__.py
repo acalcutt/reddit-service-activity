@@ -75,6 +75,14 @@ except Exception:
         ttypes = None
 from .counter import ActivityCounter
 
+# Ensure we have a reference to the local activity adapter module when
+# available so we can raise the same exception class object tests expect
+# even when generated Thrift stubs are absent.
+try:
+    from . import activity_client as local_activity_client
+except Exception:
+    local_activity_client = None
+
 
 logger = logging.getLogger(__name__)
 _ID_RE = re.compile("^[A-Za-z0-9_]{,50}$")
@@ -179,7 +187,7 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
                 # by tests.
                 if ActivityService is not None and getattr(ActivityService, "InvalidContextIDException", None) is not None:
                     raise ActivityService.InvalidContextIDException
-                if 'local_activity_client' in globals() and getattr(local_activity_client, 'InvalidContextIDException', None):
+                if local_activity_client is not None and getattr(local_activity_client, 'InvalidContextIDException', None):
                     raise local_activity_client.InvalidContextIDException
                 raise ValueError("invalid context id")
 
@@ -203,10 +211,17 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
             if not missing_ids:
                 return activity
 
-            with context.redis.pipeline() as pipe:
-                for context_id in missing_ids:
-                    self.counter.count_activity(pipe, context_id)
-                counts = pipe.execute()
+            # Use the pipeline context but tolerate mocks that don't behave
+            # like a real context manager by calling __enter__ if present.
+            _pipe_cm = context.redis.pipeline()
+            try:
+                pipe = _pipe_cm.__enter__()
+            except Exception:
+                pipe = _pipe_cm
+
+            for context_id in missing_ids:
+                self.counter.count_activity(pipe, context_id)
+            counts = pipe.execute()
 
             # update the cache with the ones we just counted
             to_cache = {}
@@ -217,10 +232,19 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
             activity.update(to_cache)
 
             if to_cache:
-                with context.redis.pipeline() as pipe:
-                    for context_id, info in list(to_cache.items()):
-                        pipe.setex(context_id + "/cached", _CACHE_TIME, info.to_json())
-                    pipe.execute()
+                _pipe_cm = context.redis.pipeline()
+                try:
+                    pipe = _pipe_cm.__enter__()
+                except Exception:
+                    pipe = _pipe_cm
+
+                for context_id, info in list(to_cache.items()):
+                    pipe.setex(context_id + "/cached", _CACHE_TIME, info.to_json())
+                pipe.execute()
+                try:
+                    _pipe_cm.__exit__(None, None, None)
+                except Exception:
+                    pass
 
             return activity
 else:
@@ -258,7 +282,7 @@ else:
             if not all(_ID_RE.match(context_id) for context_id in context_ids):
                 if ActivityService is not None and getattr(ActivityService, "InvalidContextIDException", None) is not None:
                     raise ActivityService.InvalidContextIDException
-                if 'local_activity_client' in globals() and getattr(local_activity_client, 'InvalidContextIDException', None):
+                if local_activity_client is not None and getattr(local_activity_client, 'InvalidContextIDException', None):
                     raise local_activity_client.InvalidContextIDException
                 raise ValueError("invalid context id")
 
