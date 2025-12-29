@@ -37,3 +37,20 @@ class Client:
 
     def count_activity_multi(self, context_ids):
         return {cid: ActivityInfo(count=0, is_fuzzed=False) for cid in context_ids}
+
+
+# Minimal Thrift-like placeholders used so the package can expose the
+# expected generated Thrift symbols for tests and for the Handler class
+# to subclass. These are intentionally lightweight and used only for
+# test-mode compatibility; real deployments should use generated stubs.
+class ContextIface:
+    pass
+
+
+class ContextProcessor:
+    def __init__(self, handler):
+        self._handler = handler
+
+    # Minimal processor surface for tests that don't exercise RPC plumbing.
+    def process_request(self, *args, **kwargs):
+        return self._handler

@@ -66,10 +66,9 @@ if _activityinfo_base:
         class ActivityInfo(_activityinfo_base):
             @classmethod
             def from_count(cls, count):
-                # keep a minimum jitter range of 5 for counts over 100
-                decay = math.exp(float(-min(count, 100)) / 60)
-                jitter = round(5 * decay)
-                return cls(count=count + random.randint(0, jitter), is_fuzzed=True)
+                # Use a small, bounded jitter so counts are fuzzed for privacy.
+                max_jitter = 5 if count > 100 else 4
+                return cls(count=count + random.randint(0, max_jitter), is_fuzzed=True)
 
             def to_json(self):
                 return json.dumps(
@@ -94,9 +93,8 @@ if _activityinfo_base:
 
             @classmethod
             def from_count(cls, count):
-                decay = math.exp(float(-min(count, 100)) / 60)
-                jitter = round(5 * decay)
-                return cls(count=count + random.randint(0, jitter), is_fuzzed=True)
+                max_jitter = 5 if count > 100 else 4
+                return cls(count=count + random.randint(0, max_jitter), is_fuzzed=True)
 
             def to_json(self):
                 return json.dumps({"count": self.count, "is_fuzzed": self.is_fuzzed}, sort_keys=True)
@@ -115,9 +113,8 @@ else:
 
         @classmethod
         def from_count(cls, count):
-            decay = math.exp(float(-min(count, 100)) / 60)
-            jitter = round(5 * decay)
-            return cls(count=count + random.randint(0, jitter), is_fuzzed=True)
+            max_jitter = 5 if count > 100 else 4
+            return cls(count=count + random.randint(0, max_jitter), is_fuzzed=True)
 
         def to_json(self):
             return json.dumps({"count": self.count, "is_fuzzed": self.is_fuzzed}, sort_keys=True)

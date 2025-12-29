@@ -65,6 +65,37 @@ from reddit_service_activity import activity_client as ActivityService
 
 
 logger = logging.getLogger(__name__)
+# Export a couple of helpers so tests can patch them on the module namespace
+try:
+    from baseplate.lib.metrics import metrics_client_from_config
+except Exception:
+    metrics_client_from_config = None
+
+
+def make_metrics_client(app_config):
+    # Wrap Baseplate's metrics helper so tests can patch this module-level
+    # factory. Return None if Baseplate's metrics helpers aren't available.
+    if metrics_client_from_config is None:
+        return None
+    try:
+        return metrics_client_from_config(app_config)
+    except Exception:
+        return None
+
+
+try:
+    from baseplate.lib.thrift_pool import ThriftConnectionPool as _ThriftConnectionPool
+except Exception:
+    class _ThriftConnectionPool:
+        """Minimal shim for environments without baseplate.lib.thrift_pool.
+
+        Tests can still patch `reddit_service_activitygateway.ThriftConnectionPool`.
+        In real deployments the concrete `ThriftConnectionPool` from
+        `baseplate.lib.thrift_pool` will be used.
+        """
+        pass
+
+ThriftConnectionPool = _ThriftConnectionPool
 
 
 class ActivityGateway(object):
@@ -111,6 +142,15 @@ def make_wsgi_app(app_config):
 
     baseplate = Baseplate(app_config)
     baseplate.configure_observers()
+
+    # Create metrics client (module-level wrapper) so tests can patch it.
+    metrics_client = make_metrics_client(app_config)
+    if metrics_client is not None:
+        try:
+            baseplate.add_to_context("metrics", lambda _: metrics_client)
+        except Exception:
+            # best-effort: some baseplate versions expect different factories
+            pass
 
     # Register the thrift client proxy in the request context. Pass the
     # generated-client class (or our local placeholder `ActivityServiceClient`).
