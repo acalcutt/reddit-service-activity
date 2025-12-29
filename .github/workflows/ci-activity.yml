@@ -106,25 +106,7 @@ jobs:
 
       - name: Generate thrift Python stubs
         run: |
-          # Discover baseplate .thrift include directory and set THRIFT_INCLUDE_DIR
-          THRIFT_INCLUDE_DIR=$(python -c "import importlib,os;\
-bp=importlib.import_module('baseplate'); bp_root=os.path.dirname(bp.__file__);\
-print(next((os.path.dirname(os.path.join(r,f)) for r,d,files in os.walk(bp_root) for f in files if f.endswith('.thrift')), ''))")
-          if [ -z "$THRIFT_INCLUDE_DIR" ]; then
-            echo 'Could not find baseplate .thrift files installed; aborting thrift gen'
-            exit 1
-          fi
-          echo "Using thrift include dir: $THRIFT_INCLUDE_DIR"
-          # Generate Python thrift bindings into reddit_service_activity/activity_thrift
-          thrift -I $THRIFT_INCLUDE_DIR --gen py reddit_service_activity/activity.thrift
-          rm -rf reddit_service_activity/activity_thrift || true
-          mkdir -p reddit_service_activity/activity_thrift
-          mv gen-py/* reddit_service_activity/activity_thrift/ || true
-          # Ensure package init
-          if [ ! -f reddit_service_activity/activity_thrift/__init__.py ]; then
-            touch reddit_service_activity/activity_thrift/__init__.py
-          fi
-          rm -rf gen-py || true
+          python .github/scripts/generate_thrift.py
 
       - name: Install package and test deps
         working-directory: .
