@@ -126,20 +126,13 @@ jobs:
               raise
           PY
           # read include from environment if python printed it
-          THRIFT_INCLUDE_DIR=$(python - <<'PY'
-import importlib, os, sys
-try:
-    bp = importlib.import_module('baseplate')
-    bp_root = os.path.dirname(bp.__file__)
-    for root, dirs, files in os.walk(bp_root):
-        for f in files:
-            if f.endswith('.thrift'):
-                print(os.path.dirname(os.path.join(root, f)))
-                sys.exit(0)
-except Exception:
-    pass
-print('')
-PY
+              THRIFT_INCLUDE_DIR=$(python -c "import importlib,os,sys;\
+        try:\
+          bp=importlib.import_module('baseplate'); bp_root=os.path.dirname(bp.__file__);\
+          p=next((os.path.dirname(os.path.join(r,f)) for r,d,fs in os.walk(bp_root) for f in fs if f.endswith('.thrift')), '');\
+          print(p)\
+        except Exception:\
+          print('')")
           if [ -z "$THRIFT_INCLUDE_DIR" ]; then
             echo 'Could not find baseplate .thrift files installed; aborting thrift gen'
             exit 1
