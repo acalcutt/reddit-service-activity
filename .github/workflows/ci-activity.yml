@@ -1,8 +1,9 @@
-name: CI
+name: CI — reddit-service-activity
 
 on:
-  push:
-  pull_request:
+  push: {}
+  pull_request: {}
+  workflow_dispatch: {}
 
 jobs:
   test:
@@ -67,9 +68,10 @@ jobs:
           PY
 
       - name: Install package and test deps
+        working-directory: reddit-service-activity
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e reddit-service-activity
+          python -m pip install -e .
           python -m pip install pytest
 
       - name: Run tests
