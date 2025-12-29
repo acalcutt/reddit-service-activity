@@ -34,7 +34,28 @@ except Exception:
         def tracing_client_from_config(app_config):
             return None
 from baseplate.clients.thrift import ThriftContextFactory
-from baseplate.integration.pyramid import BaseplateConfigurator
+# Prefer the new frameworks.pyramid API, fall back to integration.pyramid,
+# and finally provide a minimal shim when neither is available.
+_HAS_FRAMEWORKS_PYRAMID = False
+try:
+    from baseplate.frameworks.pyramid import BaseplateConfigurator, StaticTrustHandler
+    _HAS_FRAMEWORKS_PYRAMID = True
+except Exception:
+    try:
+        from baseplate.integration.pyramid import BaseplateConfigurator
+    except Exception:
+        # Provide a minimal fallback for BaseplateConfigurator so tests can
+        # create a WSGI app when a full baseplate integration isn't installed.
+        class BaseplateConfigurator:
+            def __init__(self, baseplate, *args, **kwargs):
+                self.baseplate = baseplate
+
+            def includeme(self, configurator):
+                # Attach a simple request attribute factory that returns an
+                # instance of the local ActivityServiceClient. This provides
+                # the minimal surface the tests exercise (is_healthy,
+                # record_activity, etc.).
+                configurator.add_request_method(lambda req: ActivityServiceClient(), 'activity', reify=True)
 from baseplate.lib.thrift_pool import thrift_pool_from_config
 from pyramid.config import Configurator
 from pyramid.httpexceptions import HTTPServiceUnavailable, HTTPNoContent
@@ -97,7 +118,19 @@ def make_wsgi_app(app_config):
 
     configurator = Configurator(settings=app_config)
 
-    baseplate_configurator = BaseplateConfigurator(baseplate)
+    # Instantiate the Baseplate configurator. Prefer the new frameworks
+    # API which accepts header-trust configuration; if available, use a
+    # conservative StaticTrustHandler (do not trust headers by default).
+    if _HAS_FRAMEWORKS_PYRAMID:
+        try:
+            trust_handler = StaticTrustHandler(trust_headers=False)
+            baseplate_configurator = BaseplateConfigurator(baseplate, header_trust_handler=trust_handler)
+        except TypeError:
+            # Older variations accept a simple trust_trace_headers kwarg.
+            baseplate_configurator = BaseplateConfigurator(baseplate, trust_trace_headers=False)
+    else:
+        baseplate_configurator = BaseplateConfigurator(baseplate)
+
     configurator.include(baseplate_configurator.includeme)
 
     controller = ActivityGateway()

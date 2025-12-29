@@ -153,7 +153,10 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
                 return {}
 
             if not all(_ID_RE.match(context_id) for context_id in context_ids):
-                raise ActivityService.InvalidContextIDException
+                # Prefer the generated thrift exception type when available
+                if ActivityService is not None and getattr(ActivityService, "InvalidContextIDException", None) is not None:
+                    raise ActivityService.InvalidContextIDException
+                raise ValueError("invalid context id")
 
             activity = {}
 
@@ -163,7 +166,12 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
             for context_id, cached_value in zip(context_ids, cached_info):
                 if cached_value is None:
                     continue
-                activity[context_id] = ActivityInfo.from_json(cached_value.decode())
+                # redis returns bytes; be tolerant of str or bytes
+                if hasattr(cached_value, 'decode'):
+                    val = cached_value.decode()
+                else:
+                    val = cached_value
+                activity[context_id] = ActivityInfo.from_json(val)
 
             # count any ones that were not cached
             missing_ids = [id_ for id_ in context_ids if id_ not in activity]
@@ -221,8 +229,12 @@ else:
         def count_activity_multi(self, context, context_ids):
             if not context_ids:
                 return {}
+
             if not all(_ID_RE.match(context_id) for context_id in context_ids):
+                if ActivityService is not None and getattr(ActivityService, "InvalidContextIDException", None) is not None:
+                    raise ActivityService.InvalidContextIDException
                 raise ValueError("invalid context id")
+
             # best-effort: try to fetch cache values, otherwise return zeros
             activity = {}
             try:
@@ -231,9 +243,15 @@ else:
                 for context_id, cached_value in zip(context_ids, cached_info):
                     if cached_value is None:
                         continue
-                    activity[context_id] = ActivityInfo.from_json(cached_value.decode())
+                    # redis returns bytes; be tolerant of str or bytes
+                    if hasattr(cached_value, "decode"):
+                        val = cached_value.decode()
+                    else:
+                        val = cached_value
+                    activity[context_id] = ActivityInfo.from_json(val)
             except Exception:
                 pass
+
             for id_ in context_ids:
                 activity.setdefault(id_, ActivityInfo.from_count(0))
             return activity
