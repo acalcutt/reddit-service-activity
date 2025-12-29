@@ -11,7 +11,7 @@ def find_baseplate_thrift_dir():
     try:
         bp = importlib.import_module("baseplate")
     except Exception as e:
-        print("Failed to import baseplate:", e)
+        print(f"Failed to import baseplate: {e}")
         return None
     bp_root = os.path.dirname(bp.__file__)
     for r, d, files in os.walk(bp_root):
@@ -27,7 +27,7 @@ def main():
         print("Could not find baseplate .thrift files installed; aborting thrift gen")
         sys.exit(1)
 
-    print("Using thrift include dir:", thrift_include)
+    print(f"Using thrift include dir: {thrift_include}")
 
     # Run thrift compiler
     cmd = ["thrift", "-I", thrift_include, "--gen", "py", "reddit_service_activity/activity.thrift"]
@@ -37,7 +37,7 @@ def main():
         print("thrift compiler not found in PATH. Ensure 'thrift' is installed.")
         sys.exit(1)
     except subprocess.CalledProcessError as e:
-        print("thrift compiler failed:", e)
+        print(f"thrift compiler failed: {e}")
         sys.exit(1)
 
     gen_dir = Path("gen-py")
