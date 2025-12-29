@@ -221,11 +221,13 @@ class ActivityContextFactory:
 class ActivityGateway(object):
     def is_healthy(self, request):
         try:
+            logger.debug("is_healthy: request.activity=%r", getattr(request, 'activity', None))
             if request.activity.is_healthy():
+                logger.debug("health check passed")
                 return {
                     "status": "healthy",
                 }
-        except:
+        except Exception:
             logger.exception("Failed health check")
             raise HTTPServiceUnavailable()
 
@@ -235,7 +237,11 @@ class ActivityGateway(object):
         remote_addr = request.remote_addr.encode()
         visitor_id = hashlib.sha1(remote_addr + user_agent).hexdigest()
 
-        request.activity.record_activity(context_id, visitor_id)
+        logger.debug("pixel: context_id=%s visitor_id=%s", context_id, visitor_id)
+        try:
+            request.activity.record_activity(context_id, visitor_id)
+        except Exception:
+            logger.exception("record_activity failed for %s", context_id)
 
         return HTTPNoContent(
             headers={

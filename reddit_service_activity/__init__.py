@@ -98,9 +98,13 @@ if _activityinfo_base:
         class ActivityInfo(_activityinfo_base):
             @classmethod
             def from_count(cls, count):
-                # Use a small, bounded jitter so counts are fuzzed for privacy.
-                max_jitter = 5 if count > 100 else 4
-                return cls(count=count + random.randint(0, max_jitter), is_fuzzed=True)
+                # Be tolerant of mocked/encoded counts by coercing to int.
+                try:
+                    c = int(count)
+                except Exception:
+                    c = 0
+                max_jitter = 5 if c > 100 else 4
+                return cls(count=c + random.randint(0, max_jitter), is_fuzzed=True)
 
             def to_json(self):
                 return json.dumps(
@@ -125,8 +129,12 @@ if _activityinfo_base:
 
             @classmethod
             def from_count(cls, count):
-                max_jitter = 5 if count > 100 else 4
-                return cls(count=count + random.randint(0, max_jitter), is_fuzzed=True)
+                try:
+                    c = int(count)
+                except Exception:
+                    c = 0
+                max_jitter = 5 if c > 100 else 4
+                return cls(count=c + random.randint(0, max_jitter), is_fuzzed=True)
 
             def to_json(self):
                 return json.dumps({"count": self.count, "is_fuzzed": self.is_fuzzed}, sort_keys=True)
@@ -145,8 +153,12 @@ else:
 
         @classmethod
         def from_count(cls, count):
-            max_jitter = 5 if count > 100 else 4
-            return cls(count=count + random.randint(0, max_jitter), is_fuzzed=True)
+            try:
+                c = int(count)
+            except Exception:
+                c = 0
+            max_jitter = 5 if c > 100 else 4
+            return cls(count=c + random.randint(0, max_jitter), is_fuzzed=True)
 
         def to_json(self):
             return json.dumps({"count": self.count, "is_fuzzed": self.is_fuzzed}, sort_keys=True)
@@ -196,6 +208,7 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
             # read cached activity
             cache_keys = [context_id + "/cached" for context_id in context_ids]
             cached_info = context.redis.mget(cache_keys)
+            logger.debug("cache_keys=%s cached_info=%r", cache_keys, cached_info)
             for context_id, cached_value in zip(context_ids, cached_info):
                 if cached_value is None:
                     continue
@@ -208,6 +221,7 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
 
             # count any ones that were not cached
             missing_ids = [id_ for id_ in context_ids if id_ not in activity]
+            logger.debug("missing_ids=%s", missing_ids)
             if not missing_ids:
                 return activity
 
@@ -225,6 +239,7 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
                         pass
 
                 counts = pipe.execute()
+                logger.debug("pipeline.execute returned counts=%r", counts)
 
                 # If the pipeline execution didn't return concrete integer
                 # counts (some test mocks may return None or an empty list),
@@ -238,6 +253,7 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
                         except Exception:
                             alt = None
                         alt_counts.append(alt)
+                    logger.debug("alt_counts=%r", alt_counts)
                     counts = alt_counts
 
                 # update the cache with the ones we just counted
@@ -246,9 +262,11 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
                     if count is not None:
                         info = ActivityInfo.from_count(count)
                         to_cache[context_id] = info
+                logger.debug("to_cache=%r", {k: v.to_json() for k, v in to_cache.items()})
 
                 if to_cache:
                     for context_id, info in list(to_cache.items()):
+                        logger.debug("pipe.setex %s %s %r", context_id + "/cached", _CACHE_TIME, info.to_json())
                         pipe.setex(context_id + "/cached", _CACHE_TIME, info.to_json())
                     pipe.execute()
 
