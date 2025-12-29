@@ -1,0 +1,4 @@
+git+https://github.com/acalcutt/baseplate.py.git@develop#egg=baseplate
+
+mock
+webtest

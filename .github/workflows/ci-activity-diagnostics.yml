@@ -1,0 +1,61 @@
+name: CI - reddit-service-activity Diagnostics
+
+on:
+  workflow_dispatch: {}
+  pull_request: {}
+  push: {}
+
+jobs:
+  diagnostics:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --no-build-isolation -e .
+
+      - name: Run import diagnostics
+        run: |
+          python - <<'PY'
+          import sys, importlib, traceback, os
+          print('cwd:', os.getcwd())
+          try:
+              pkg = importlib.import_module('reddit_service_activity')
+              print('reddit_service_activity file:', getattr(pkg,'__file__',None))
+          except Exception:
+              print('import reddit_service_activity failed')
+              traceback.print_exc()
+          try:
+              m = importlib.import_module('reddit_service_activity.activity_thrift')
+              print('activity_thrift file:', getattr(m,'__file__',None))
+              print('has ttypes:', getattr(m,'ttypes', None))
+              if getattr(m,'ttypes', None) is not None:
+                  print('ttypes members sample:', [n for n in dir(m.ttypes) if not n.startswith("_")][:50])
+          except Exception:
+              print('import activity_thrift failed')
+              traceback.print_exc()
+          print('sys.path head:', sys.path[:12])
+          # Also print filesystem view of the package directory to help debug
+          pkg_dir = os.path.join(os.getcwd(), 'reddit_service_activity')
+          print('\n-- filesystem listing for', pkg_dir)
+          try:
+            for root, dirs, files in os.walk(pkg_dir):
+              print(root)
+              for d in dirs:
+                print('  dir:', d)
+              for f in files:
+                print('  file:', f)
+          except Exception as e:
+            print('listing failed:', e)
+          PY

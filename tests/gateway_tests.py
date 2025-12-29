@@ -5,7 +5,7 @@ import webtest
 
 from pyramid.httpexceptions import HTTPException
 
-from reddit_service_activity.activity_thrift.ActivityService import Client
+from reddit_service_activity.activity_client import Client
 from reddit_service_activitygateway import ActivityGateway, make_wsgi_app
 
 
