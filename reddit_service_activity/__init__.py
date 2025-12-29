@@ -61,6 +61,13 @@ except Exception:
     try:
         from .activity_client import Client as ActivityServiceClient
         from . import activity_client as ActivityService
+        # Also import the local activity_client module so we can raise its
+        # InvalidContextIDException in fallback paths consistently with tests.
+        try:
+            import importlib as _importlib
+            local_activity_client = _importlib.import_module(__name__ + ".activity_client")
+        except Exception:
+            local_activity_client = None
         ttypes = None
     except Exception:
         ActivityService = None
@@ -167,9 +174,13 @@ if ActivityService is not None and getattr(ActivityService, "ContextIface", None
                 return {}
 
             if not all(_ID_RE.match(context_id) for context_id in context_ids):
-                # Prefer the generated thrift exception type when available
+                # Prefer the generated thrift exception type when available,
+                # otherwise raise the local activity_client exception expected
+                # by tests.
                 if ActivityService is not None and getattr(ActivityService, "InvalidContextIDException", None) is not None:
                     raise ActivityService.InvalidContextIDException
+                if 'local_activity_client' in globals() and getattr(local_activity_client, 'InvalidContextIDException', None):
+                    raise local_activity_client.InvalidContextIDException
                 raise ValueError("invalid context id")
 
             activity = {}

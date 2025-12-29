@@ -62,6 +62,7 @@ from pyramid.httpexceptions import HTTPServiceUnavailable, HTTPNoContent
 
 from reddit_service_activity.activity_client import Client as ActivityServiceClient
 from reddit_service_activity import activity_client as ActivityService
+from reddit_service_activity import activity_client as local_activity_client
 
 
 logger = logging.getLogger(__name__)
@@ -274,10 +275,10 @@ def make_wsgi_app(app_config):
         if ActivityService is not None and getattr(ActivityService, "ContextIface", None) is not None:
             baseplate.add_to_context("activity", ThriftContextFactory(pool, ActivityServiceClient))
         else:
-            baseplate.add_to_context("activity", lambda _: ActivityServiceClient())
+            baseplate.add_to_context("activity", ActivityContextFactory(ActivityServiceClient))
     except Exception:
         # Fallback: register direct client factory
-        baseplate.add_to_context("activity", lambda _: ActivityServiceClient())
+        baseplate.add_to_context("activity", ActivityContextFactory(ActivityServiceClient))
 
     configurator = Configurator(settings=app_config)
 
