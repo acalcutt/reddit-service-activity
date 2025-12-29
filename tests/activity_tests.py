@@ -69,15 +69,15 @@ class ActivityServiceTests(unittest.TestCase):
             self.mock_context.redis, "context", "visitor")
 
     def test_record_activity_bad_id(self):
-        self.handler.record_activity(self.mock_context, u"\u2603", "visitor")
+        self.handler.record_activity(self.mock_context, "\u2603", "visitor")
         self.assertFalse(self.mock_counter.record_activity.called)
 
-        self.handler.record_activity(self.mock_context, "context", u"\u2603")
+        self.handler.record_activity(self.mock_context, "context", "\u2603")
         self.assertFalse(self.mock_counter.record_activity.called)
 
     def test_count_activity_bad_id(self):
         with self.assertRaises(ActivityService.InvalidContextIDException):
-            self.handler.count_activity(self.mock_context, u"\u2603")
+            self.handler.count_activity(self.mock_context, "\u2603")
 
     @mock.patch("reddit_service_activity.ActivityInfo", autospec=True)
     def test_count_activity_cache_hit(self, MockActivityInfo):
